@@ -37,7 +37,7 @@ from allocate cimport allocate
 from buffers cimport asbuffer_r, frombuffer_r, viewfromobject_r
 
 from czmq cimport *
-from message cimport Message, MessageTracker
+from message cimport Message, copy_zmq_msg_bytes
 
 cdef extern from "Python.h":
     ctypedef int Py_ssize_t
@@ -453,13 +453,11 @@ cdef class Socket:
             The returned message, or raises ZMQError otherwise.
         """
         self._check_closed()
-        
-        m = self._recv_message(flags)
-        
+
         if copy:
-            return m.bytes
+            return self._recv_copy(flags)
         else:
-            return m
+            return self._recv_message(flags)
     
     def _recv_message(self, int flags=0):
         """Receive a message in a non-copying manner and return a Message."""
@@ -473,6 +471,14 @@ cdef class Socket:
         if rc != 0:
             raise ZMQError()
         return msg
+
+    def _recv_copy(self, int flags=0):
+        """Recieve a message and return a copy"""
+        cdef zmq_msg_t zmq_msg
+        with nogil:
+            zmq_msg_init (&zmq_msg)
+            rc = zmq_recv(self.handle, &zmq_msg, flags)
+        return copy_zmq_msg_bytes(&zmq_msg)
 
     def send_multipart(self, msg_parts, int flags=0, copy=True):
         """s.send_multipart(msg_parts, flags=0, copy=True)
